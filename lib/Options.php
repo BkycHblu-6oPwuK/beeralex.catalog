@@ -12,8 +12,8 @@ final class Options extends AbstractOptions
 
     protected function mapOptions(array $options): void
     {
-        $this->apiKey = (string)($options['API_KEY'] ?? '');
-        $this->secretKey = (string)($options['SECRET_KEY'] ?? '');
+        $this->apiKey = (string)($options['api_key'] ?? '');
+        $this->secretKey = (string)($options['secret_key'] ?? '');
     }
 
     public function getModuleId(): string
