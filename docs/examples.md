@@ -119,6 +119,9 @@ $basketFactory = service(BasketFactory::class);
 $basketService = $basketFactory->createBasketServiceForCurrentUser();
 
 $result = $basketService->increment($offerId, $quantity);
+if ($result->isSuccess()) {
+    $result = $basketService->save();
+}
 
 if ($result->isSuccess()) {
     $data = $basketService->getBasketData();

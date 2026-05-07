@@ -2,6 +2,7 @@
 namespace Beeralex\Catalog\Service;
 
 use Beeralex\Catalog\Repository\PersonTypeRepository;
+use Beeralex\Catalog\Service\Basket\BasketFactory;
 use Bitrix\Main\Type\DateTime;
 use Bitrix\Sale\BasketItem;
 use Bitrix\Sale\Order;
@@ -217,10 +218,11 @@ class OrderService
     {
         $order = Order::load($orderId);
         if ($order) {
-            $curBasket = \Beeralex\Catalog\Basket\BasketFacade::getForCurrentUser();
+            $basketFactory = \service(BasketFactory::class);
+            $curBasket = $basketFactory->createBasketServiceForCurrentUser();
             $curBasket->removeAll();
             foreach ($order->getBasket()->getBasketItems() as $basketItem) {
-                $curBasket->add($basketItem->getProductId(), $basketItem->getQuantity());
+                $curBasket->addNewItem($basketItem->getProductId(), $basketItem->getQuantity());
             }
             $curBasket->save();
         }

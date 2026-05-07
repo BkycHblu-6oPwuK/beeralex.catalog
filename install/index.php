@@ -9,9 +9,10 @@ class beeralex_catalog extends CModule
 {
     public function __construct()
     {
+        include __DIR__ . '/version.php';
         $this->MODULE_ID = 'beeralex.catalog';
-        $this->MODULE_VERSION = '1.1.0';
-        $this->MODULE_VERSION_DATE = '2025-04-09 12:00:00';
+        $this->MODULE_VERSION = $arModuleVersion['VERSION'];
+        $this->MODULE_VERSION_DATE = $arModuleVersion['VERSION_DATE'];
         $this->MODULE_NAME = 'beeralex.catalog';
         $this->MODULE_DESCRIPTION = 'beeralex.catalog module';
         $this->PARTNER_NAME = 'beeralex';

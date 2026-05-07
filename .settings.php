@@ -19,7 +19,6 @@ use Beeralex\Catalog\Repository\FuserRepository;
 use Beeralex\Catalog\Repository\PersonTypeRepository;
 use Beeralex\Catalog\Repository\PriceRepository;
 use Beeralex\Catalog\Repository\SortingRepository;
-use Beeralex\Catalog\Repository\StoreRepository;
 use Beeralex\Catalog\Service\Basket\BasketFactory;
 use Beeralex\Catalog\Service\CatalogElementService;
 use Beeralex\Catalog\Service\CatalogSectionsService;

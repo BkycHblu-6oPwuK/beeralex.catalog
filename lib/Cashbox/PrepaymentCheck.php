@@ -1,51 +1,40 @@
 <?php
-declare(strict_types=1);
+
 namespace Beeralex\Catalog\Cashbox;
 
 use Bitrix\Sale\Cashbox\Check;
-use Bitrix\Sale\PriceMaths;
 
 /**
  * Исправленное округление в частичной предоплате
  */
 class PrepaymentCheck extends Check
 {
-    public static function getType(): string
+    public static function getType()
     {
         return 'prepayment';
     }
 
-    public static function getCalculatedSign(): string
+    public static function getCalculatedSign()
     {
         return static::CALCULATED_SIGN_INCOME;
     }
 
-    public static function getName(): string
+    public static function getName()
     {
-        return 'Частичная предоплата custom';
+        return 'Частичная предоплата parfum';
     }
 
-    public static function getSupportedEntityType(): string
+    public static function getSupportedEntityType()
     {
         return static::SUPPORTED_ENTITY_TYPE_PAYMENT;
     }
 
-    public static function getSupportedRelatedEntityType(): string
+    public static function getSupportedRelatedEntityType()
     {
         return static::SUPPORTED_ENTITY_TYPE_SHIPMENT;
     }
 
-    /**
-     * @throws Main\ArgumentException
-     * @throws Main\ArgumentNullException
-     * @throws Main\ArgumentOutOfRangeException
-     * @throws Main\ArgumentTypeException
-     * @throws Main\LoaderException
-     * @throws Main\NotImplementedException
-     * @throws Main\ObjectPropertyException
-     * @throws Main\SystemException
-     */
-    protected function extractDataInternal(): array
+    protected function extractDataInternal()
     {
         $result = parent::extractDataInternal();
         $result = $this->correlatePrices($result);
@@ -54,102 +43,154 @@ class PrepaymentCheck extends Check
             $result['PRODUCTS'][$i]['PAYMENT_OBJECT'] = static::PAYMENT_OBJECT_PAYMENT;
         }
 
-        if (!empty($result['DELIVERY']) && is_array($result['DELIVERY'])) {
+        if (!empty($result['DELIVERY'])) {
             foreach ($result['DELIVERY'] as $i => $item) {
                 $result['DELIVERY'][$i]['PAYMENT_OBJECT'] = static::PAYMENT_OBJECT_PAYMENT;
             }
         }
+
         return $result;
     }
 
-    protected function needPrintMarkingCode($basketItem): bool
+    protected function needPrintMarkingCode(mixed $basketItem): bool
     {
         return false;
     }
 
     private function correlatePrices(array $result): array
     {
-        $paymentSum = 0;
+        $paymentKop = 0;
         foreach ($result['PAYMENTS'] as $payment) {
-            $paymentSum += $payment['SUM'];
+            $paymentKop += (int) round($payment['SUM'] * 100);
         }
 
-        /** @var Order $order */
+        /** @var \Bitrix\Sale\Order $order */
         $order = $result['ORDER'];
+        $orderKop = (int) round($order->getPrice() * 100);
 
-        $rate = $paymentSum / $order->getPrice();
+        if ($orderKop <= 0 || $paymentKop <= 0) {
+            return $result;
+        }
 
-        $countProductPositions = $result['PRODUCTS'] ? count($result['PRODUCTS']) : 0;
-        $countDeliveryPositions = $result['DELIVERY'] ? count($result['DELIVERY']) : 0;
+        $rate = $paymentKop / $orderKop;
 
-        if ($countDeliveryPositions === 0) {
-            $totalSum = 0;
-            for ($i = 0; $i < $countProductPositions - 1; $i++) {
-                $totalSum += $this->correlatePosition($result['PRODUCTS'][$i], $rate);
+        $positions = [];
+
+        if (!empty($result['PRODUCTS'])) {
+            foreach ($result['PRODUCTS'] as $index => $item) {
+                $positions[] = [
+                    'type' => 'PRODUCTS',
+                    'index' => $index
+                ];
+            }
+        }
+
+        if (!empty($result['DELIVERY'])) {
+            foreach ($result['DELIVERY'] as $index => $item) {
+                $positions[] = [
+                    'type' => 'DELIVERY',
+                    'index' => $index
+                ];
+            }
+        }
+
+        if (empty($positions)) {
+            return $result;
+        }
+
+        $lineKops = [];
+        $distributedKop = 0;
+
+        foreach ($positions as $i => $pos) {
+            $item = $result[$pos['type']][$pos['index']];
+            $originalKop = (int) round($item['SUM'] * 100);
+            $lineSumKop = (int) round($originalKop * $rate);
+            $lineKops[$i] = $lineSumKop;
+            $distributedKop += $lineSumKop;
+        }
+
+        $diff = $paymentKop - $distributedKop;
+        $lastIdx = count($positions) - 1;
+        $lineKops[$lastIdx] += $diff;
+
+        if ($lineKops[$lastIdx] <= 0) {
+            $lineKops[$lastIdx] -= $diff;
+            $lineKops[0] += $diff;
+        }
+
+        $newProducts = [];
+        $newDelivery = [];
+        $hasDelivery = !empty($result['DELIVERY']);
+
+        foreach ($positions as $i => $pos) {
+            $item = $result[$pos['type']][$pos['index']];
+            unset($item['DISCOUNT']);
+
+            $quantity = (float)$item['QUANTITY'];
+            $qtyInt   = (int) round($quantity);
+            $lineKop  = $lineKops[$i];
+
+            $isIntQty = abs($quantity - $qtyInt) < 0.000001 && $qtyInt > 0;
+
+            if ($isIntQty) {
+                $priceKop = intdiv($lineKop, $qtyInt);
+                $remainder = $lineKop - $priceKop * $qtyInt;
+            } else {
+                $priceKop = null;
+                $remainder = 0;
             }
 
-            if (isset($result['PRODUCTS'])) {
-                $lastElement = $countProductPositions - 1;
-                $result['PRODUCTS'][$lastElement]['SUM'] = PriceMaths::roundPrecision($paymentSum - $totalSum);
-                $price = PriceMaths::roundPrecision($result['PRODUCTS'][$lastElement]['SUM'] / $result['PRODUCTS'][$lastElement]['QUANTITY']);
-                $result['PRODUCTS'][$lastElement]['BASE_PRICE'] = $result['PRODUCTS'][$lastElement]['PRICE'] = $price;
+            if ($priceKop !== null && $remainder > 0) {
+                $itemA = $item;
+                $itemA['QUANTITY']   = $remainder;
+                $itemA['PRICE']      = $this->formatMoney(($priceKop + 1) / 100);
+                $itemA['BASE_PRICE'] = $itemA['PRICE'];
+                $itemA['SUM']        = $this->formatMoney(($priceKop + 1) * $remainder / 100);
 
-                if (isset($result['PRODUCTS'][$lastElement]['DISCOUNT'])) {
-                    unset($result['PRODUCTS'][$lastElement]['DISCOUNT']);
-                }
-            }
-        } else {
-            $totalSum = 0;
-            for ($i = 0; $i < $countProductPositions; $i++) {
-                $totalSum += $this->correlatePosition($result['PRODUCTS'][$i], $rate);
-            }
+                $itemB = $item;
+                $itemB['QUANTITY']   = $qtyInt - $remainder;
+                $itemB['PRICE']      = $this->formatMoney($priceKop / 100);
+                $itemB['BASE_PRICE'] = $itemB['PRICE'];
+                $itemB['SUM']        = $this->formatMoney($priceKop * ($qtyInt - $remainder) / 100);
 
-            if ($countDeliveryPositions === 1) {
-                $result['DELIVERY'][0]['SUM'] = PriceMaths::roundPrecision($paymentSum - $totalSum);
-                $price = PriceMaths::roundPrecision($result['DELIVERY'][0]['SUM'] / $result['DELIVERY'][0]['QUANTITY']);
-                $result['DELIVERY'][0]['BASE_PRICE'] = $result['DELIVERY'][0]['PRICE'] = $price;
-
-                if (isset($result['DELIVERY'][0]['DISCOUNT'])) {
-                    unset($result['DELIVERY'][0]['DISCOUNT']);
+                if ($pos['type'] === 'PRODUCTS') {
+                    $newProducts[] = $itemA;
+                    $newProducts[] = $itemB;
+                } else {
+                    $newDelivery[] = $itemA;
+                    $newDelivery[] = $itemB;
                 }
             } else {
-                for ($i = 0; $i < $countDeliveryPositions - 1; $i++) {
-                    $totalSum += $this->correlatePosition($result['DELIVERY'][$i], $rate);
+                if ($priceKop !== null) {
+                    $item['PRICE'] = $this->formatMoney($priceKop / 100);
+                } else {
+                    $price = $quantity > 0 ? ($lineKop / 100) / $quantity : $lineKop / 100;
+                    $item['PRICE'] = $this->formatMoney($price);
                 }
+                $item['BASE_PRICE'] = $item['PRICE'];
+                $item['SUM']        = $this->formatMoney($lineKop / 100);
 
-                if (isset($result['DELIVERY'])) {
-                    $lastElement = $countDeliveryPositions - 1;
-                    $result['DELIVERY'][$lastElement]['SUM'] = PriceMaths::roundPrecision($paymentSum - $totalSum);
-                    $price = PriceMaths::roundPrecision($result['DELIVERY'][$lastElement]['SUM'] / $result['DELIVERY'][$lastElement]['QUANTITY']);
-                    $result['DELIVERY'][$lastElement]['BASE_PRICE'] = $result['DELIVERY'][$lastElement]['PRICE'] = $price;
-
-                    if (isset($result['DELIVERY'][$lastElement]['DISCOUNT'])) {
-                        unset($result['DELIVERY'][$lastElement]['DISCOUNT']);
-                    }
+                if ($pos['type'] === 'PRODUCTS') {
+                    $newProducts[] = $item;
+                } else {
+                    $newDelivery[] = $item;
                 }
             }
+        }
+
+        if (!empty($newProducts)) {
+            $result['PRODUCTS'] = $newProducts;
+        }
+        if ($hasDelivery) {
+            $result['DELIVERY'] = $newDelivery;
         }
 
         return $result;
     }
 
-    private function correlatePosition(array &$item, float $rate): float
+    protected function formatMoney(float $sum)
     {
-        $quantity = $item['QUANTITY'];
-        $sum = PriceMaths::roundPrecision($item['SUM'] * $rate);
-        $price = PriceMaths::roundPrecision($sum / $quantity);
-        $calculatedSum = PriceMaths::roundPrecision($price * $quantity);
-        if ($calculatedSum !== $sum) {
-            $sum = $calculatedSum;
-        }
-
-        $item['SUM'] = $sum;
-        $item['BASE_PRICE'] = $item['PRICE'] = $price;
-
-        if (isset($item['DISCOUNT'])) {
-            unset($item['DISCOUNT']);
-        }
-
-        return $sum;
+        return number_format($sum, 2, '.', '');
     }
 }
+

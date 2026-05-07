@@ -62,6 +62,10 @@ $result = $basketService->increment(123);
 $result = $basketService->increment(123, 3);
 
 if ($result->isSuccess()) {
+    $result = $basketService->save();
+}
+
+if ($result->isSuccess()) {
     echo "Товар добавлен в корзину";
 } else {
     foreach ($result->getErrors() as $error) {
@@ -85,6 +89,9 @@ public function decrement(int $offerId, int $quantity = 1): Result
 
 ```php
 $result = $basketService->decrement(123, 2);
+if ($result->isSuccess()) {
+    $basketService->save();
+}
 ```
 
 #### remove()
@@ -99,7 +106,9 @@ public function remove(int $offerId): Result
 
 ```php
 $result = $basketService->remove(123);
-if (!$result->isSuccess()) {
+if ($result->isSuccess()) {
+    $basketService->save();
+} else {
     echo "Товар не найден в корзине";
 }
 ```
@@ -116,6 +125,9 @@ public function removeAll(): Result
 
 ```php
 $result = $basketService->removeAll();
+if ($result->isSuccess()) {
+    $basketService->save();
+}
 ```
 
 #### getItems()
@@ -215,6 +227,9 @@ public function changeProductQuantityInBasket(int $offerId, int $quantity): Resu
 ```php
 // Установить количество = 5
 $result = $basketService->changeProductQuantityInBasket(123, 5);
+if ($result->isSuccess()) {
+    $basketService->save();
+}
 ```
 
 #### applyCoupon()
@@ -264,6 +279,24 @@ public function getOffersQuantity(): int
 ```php
 $count = $basketService->getOffersQuantity();
 // 3 (если в корзине 3 разных товара, даже если общее количество = 10)
+```
+
+#### save()
+
+Сохраняет состояние корзины в базу данных. Должен вызываться явно после любых изменений (добавление, удаление, изменение количества).
+
+```php
+public function save(): Result
+```
+
+**Возвращает:** `Result` с информацией об успехе сохранения
+
+**Пример:**
+
+```php
+$basketService->increment(123, 2);
+$basketService->increment(456, 1);
+$result = $basketService->save(); // Одно сохранение для всех изменений
 ```
 
 #### getBasket()
@@ -500,6 +533,7 @@ $basketService = $basketFactory->createBasketServiceForCurrentUser();
 // Добавляем товары
 $basketService->increment(123, 2);  // 2 шт товара #123
 $basketService->increment(456, 1);  // 1 шт товара #456
+$basketService->save();             // Одно сохранение для всех изменений
 
 // Применяем купон
 $basketService->applyCoupon('WINTER2025');
@@ -532,6 +566,9 @@ $basketFactory = service(BasketFactory::class);
 $basketService = $basketFactory->createBasketServiceForCurrentUser();
 
 $result = $basketService->increment($offerId, $quantity);
+if ($result->isSuccess()) {
+    $result = $basketService->save();
+}
 
 if ($result->isSuccess()) {
     $data = $basketService->getBasketData();
@@ -563,6 +600,10 @@ if ($quantity > 0) {
     $result = $basketService->changeProductQuantityInBasket($offerId, $quantity);
 } else {
     $result = $basketService->remove($offerId);
+}
+
+if ($result->isSuccess()) {
+    $result = $basketService->save();
 }
 
 if ($result->isSuccess()) {

@@ -48,10 +48,6 @@ class BasketService
             $result = $this->addNewItem($offerId, $quantity);
         }
 
-        if ($result->isSuccess()) {
-            return $this->basket->save();
-        }
-
         return $result;
     }
 
@@ -70,10 +66,6 @@ class BasketService
             }
         }
 
-        if ($result->isSuccess()) {
-            return $this->basket->save();
-        }
-
         return $result;
     }
 
@@ -87,10 +79,6 @@ class BasketService
                 if (!$deleteResult->isSuccess()) {
                     return $deleteResult;
                 }
-            }
-            $saveResult = $this->basket->save();
-            if (!$saveResult->isSuccess()) {
-                return $saveResult;
             }
         } else {
             $result->addError(new \Bitrix\Main\Error("Товар ({$offerId}) не найден в корзине", 'basket'));
@@ -107,7 +95,7 @@ class BasketService
                 return $deleteResult;
             }
         }
-        return $this->basket->save();
+        return new Result();
     }
 
     public function getIds()
@@ -195,7 +183,7 @@ class BasketService
             if (!$setFieldResult->isSuccess()) {
                 return $setFieldResult;
             }
-            return $this->basket->save();
+            return new Result();
         } else {
             $result->addError(new \Bitrix\Main\Error("Basket item with offerId {$offerId} not found", 'basket'));
         }
@@ -228,6 +216,11 @@ class BasketService
         return $this->basket;
     }
 
+    public function save(): Result
+    {
+        return $this->basket->save();
+    }
+
     protected function changeExistedItemQuantity(BasketItem $basketItem, int $quantity): Result
     {
         $checkQuantityResult = $this->checkQuantity($basketItem->getProductId(), $basketItem->getQuantity() + $quantity);
@@ -244,7 +237,7 @@ class BasketService
         return $result;
     }
 
-    protected function addNewItem(int $offerId, int $quantity): Result
+    public function addNewItem(int $offerId, int $quantity): Result
     {
         $checkQuantityResult = $this->checkQuantity($offerId, $quantity);
         if (!$checkQuantityResult->isSuccess()) {
@@ -259,7 +252,7 @@ class BasketService
             }
             return $result;
         }
-        return $this->basket->save();
+        return new Result();
     }
 
     protected function getFields(int $quantity): array
