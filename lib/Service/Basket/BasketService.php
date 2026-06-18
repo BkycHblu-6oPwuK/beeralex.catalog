@@ -106,9 +106,9 @@ class BasketService
     public function getItems(): array
     {
         if ($this->basket->count() > 0) {
-            $basketItems = $this->basketUtils->getItems($this->basket);
+            $basketItems = $this->basketUtils->getItems();
             foreach ($basketItems as &$basketItem) {
-                $originalPrice = $basketItem['PRICE'];
+                $originalPrice = $basketItem['BASE_PRICE'];
                 $finalPrice = 0;
                 $discountPrice = $this->discountService->getPrice($basketItem['CODE']);
                 

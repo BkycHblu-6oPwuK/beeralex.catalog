@@ -72,6 +72,8 @@ class BasketUtils
                 'QUANTITY' => $basketItem->getQuantity(),
                 'PRICE' => $basketItem->getPrice(),
                 'PRICE_FORMATTED' => $this->priceService->format($basketItem->getPrice()),
+                'BASE_PRICE' => $basketItem->getBasePrice(),
+                'BASE_PRICE_FORMATTED' => $this->priceService->format($basketItem->getBasePrice()),
                 'FULL_PRICE' => $basketItem->getPrice() * $basketItem->getQuantity(),
                 'FULL_PRICE_FORMATTED' => $this->priceService->format($basketItem->getPrice() * $basketItem->getQuantity()),
             ];
