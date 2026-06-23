@@ -101,9 +101,15 @@ return [
             ],
             CatalogService::class => [
                 'constructor' => static function () {
+                    $offersRepository = null;
+                    try {
+                        $offersRepository = service(DIServiceKey::OFFERS_REPOSITORY->value);
+                    } catch (\Throwable) {
+                        $offersRepository = service(DIServiceKey::EMPTY_OFFERS_REPOSITORY->value);
+                    }
                     return new CatalogService(
                         productsRepository: service(DIServiceKey::PRODUCT_REPOSITORY->value),
-                        offersRepository: service(DIServiceKey::OFFERS_REPOSITORY->value),
+                        offersRepository: $offersRepository,
                         viewedProductRepository: service(CatalogViewedProductRepository::class),
                         priceTypeRepository: service(PriceTypeRepository::class),
                         sortingService: service(DIServiceKey::SORTING_SERVICE->value),
@@ -115,9 +121,15 @@ return [
             ],
             CatalogElementService::class => [
                 'constructor' => static function () {
+                    $offersRepository = null;
+                    try {
+                        $offersRepository = service(DIServiceKey::OFFERS_REPOSITORY->value);
+                    } catch (\Throwable) {
+                        $offersRepository = service(DIServiceKey::EMPTY_OFFERS_REPOSITORY->value);
+                    }
                     return new CatalogElementService(
                         productRepository: service(DIServiceKey::PRODUCT_REPOSITORY->value),
-                        offersRepository: service(DIServiceKey::OFFERS_REPOSITORY->value),
+                        offersRepository: $offersRepository,
                         propertyRepository: service(PropertyRepository::class),
                         propertyFeaturesRepository: service(PropertyFeaturesRepository::class),
                         hlblockService: service(HlblockService::class),
