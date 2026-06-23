@@ -39,8 +39,7 @@ class BasketFactory
         BasketBase $basket,
         ?ProductRepositoryContract $productsRepository = null,
         ?OfferRepositoryContract $offersRepository = null
-    ): BasketService
-    {
+    ): BasketService {
         return new BasketService(
             $basket,
             $this->createBasketUtils(
@@ -58,8 +57,7 @@ class BasketFactory
     public function createBasketServiceForCurrentUser(
         ?ProductRepositoryContract $productsRepository = null,
         ?OfferRepositoryContract $offersRepository = null
-    ): BasketService
-    {
+    ): BasketService {
         return $this->createBasketService($this->createBasketForCurrentUser(), $productsRepository, $offersRepository);
     }
 
@@ -69,9 +67,16 @@ class BasketFactory
         BasketBase $basket,
         PriceService $priceService
     ): BasketUtils {
+        if (!$offersRepository) {
+            try {
+                $offersRepository = service(DIServiceKey::OFFERS_REPOSITORY->value);
+            } catch (\Throwable) {
+                $offersRepository = service(DIServiceKey::EMPTY_OFFERS_REPOSITORY->value);
+            }
+        }
         return new BasketUtils(
             $productsRepository ?? service(DIServiceKey::PRODUCT_REPOSITORY->value),
-            $offersRepository ?? service(DIServiceKey::OFFERS_REPOSITORY->value),
+            $offersRepository,
             $basket,
             $priceService
         );
