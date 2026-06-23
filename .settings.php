@@ -35,6 +35,7 @@ use Beeralex\Core\Service\LanguageService;
 use Beeralex\Core\Service\LocationService;
 use Beeralex\Core\Service\SortingService;
 use Beeralex\Core\Service\UrlService;
+use Beeralex\Catalog\Repository\EmptySortingRepository;
 use Bitrix\Main\Loader;
 
 return [
@@ -71,6 +72,9 @@ return [
                         iblockCode: 'sorting',
                     );
                 },
+            ],
+            EmptySortingRepository::class => [
+                'className' => EmptySortingRepository::class,
             ],
             PriceTypeRepository::class => [
                 'className' => PriceTypeRepository::class,
@@ -168,8 +172,13 @@ return [
             ],
             DIServiceKey::SORTING_SERVICE->value => [
                 'constructor' => static function () {
+                    try {
+                        $sortingRepository = service(DIServiceKey::SORTING_REPOSITORY->value);
+                    } catch (\Throwable) {
+                        $sortingRepository = service(EmptySortingRepository::class);
+                    }
                     return new SortingService(
-                        sortingRepository: service(DIServiceKey::SORTING_REPOSITORY->value)
+                        sortingRepository: $sortingRepository
                     );
                 }
             ],
