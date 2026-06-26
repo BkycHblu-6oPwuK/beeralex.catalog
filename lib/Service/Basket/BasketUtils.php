@@ -38,7 +38,7 @@ class BasketUtils
         $productsIds = $this->offersRepository->getProductsIdsByOffersIds($offersIds) + $offersIds;
         
         // Получаем информацию о товарах
-        $products = $this->productsRepository->getProducts(array_values($productsIds));
+        $products = $this->productsRepository->getProducts(array_values($productsIds), false);
 
         // Получаем информацию о торговых предложениях
         $offers = $this->offersRepository->getOffersByIds($offersIds);

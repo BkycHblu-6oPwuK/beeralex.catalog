@@ -22,15 +22,16 @@ class ProductsRepository extends AbstractCatalogRepository implements ProductRep
     /**
      * Получает товары по ID со связкой цен.
      */
-    public function getProducts(array $productIds, bool $onlyActive = true): array
+    public function getProducts(array $productIds, bool $onlyAvailable = true): array
     {
         if (empty($productIds)) {
             return [];
         }
 
         $filter = ['ID' => $productIds];
-        if ($onlyActive) {
+        if ($onlyAvailable) {
             $filter['ACTIVE'] = 'Y';
+            $filter['CATALOG.AVAILABLE'] = 'Y';
         }
 
         $items = $this->findAll(
@@ -59,7 +60,7 @@ class ProductsRepository extends AbstractCatalogRepository implements ProductRep
     {
         $query = $this->query()
             ->setSelect(['ID'])
-            ->setFilter(array_merge(['ACTIVE' => 'Y'], $filter));
+            ->setFilter(array_merge(['ACTIVE' => 'Y', 'CATALOG.AVAILABLE' => 'Y'], $filter));
 
         $ids = [];
         $res = $query->exec();

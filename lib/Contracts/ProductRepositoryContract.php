@@ -9,7 +9,7 @@ interface ProductRepositoryContract extends IblockRepositoryContract
     /**
      * Получает товары по ID со связкой цен.
      */
-    public function getProducts(array $productIds): array;
+    public function getProducts(array $productIds, bool $onlyAvailable = true): array;
 
     /**
      * Получает товар с его предложениями.

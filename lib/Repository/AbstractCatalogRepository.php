@@ -70,8 +70,20 @@ abstract class AbstractCatalogRepository extends IblockRepository
         $priceCatalogAdded = false;
         $storeAdded = false;
         $catalogAdded = false;
+        $joinFields = array_merge(
+            array_values($select),
+            array_keys($filter),
+            array_keys($order)
+        );
+        $joinFields = array_map(
+            static fn($field) => preg_replace('/^[=!<>%?@~]+/', '', (string)$field),
+            $joinFields
+        );
 
-        foreach ($select as $field) {
+        foreach ($joinFields as $field) {
+            if ($priceAdded && $priceCatalogAdded && $storeAdded && $catalogAdded) {
+                break;
+            }
             if ($priceAdded === false && ($field === 'PRICE' || strstr($field, 'PRICE.'))) {
                 $query = $this->catalogService->addPriceToQuery($query);
                 $priceAdded = true;
@@ -84,9 +96,6 @@ abstract class AbstractCatalogRepository extends IblockRepository
             } elseif ($catalogAdded === false && ($field === 'CATALOG' || strstr($field, 'CATALOG.'))) {
                 $query = $this->catalogService->addCatalogToQuery($query);
                 $catalogAdded = true;
-            }
-            if ($priceAdded && $priceCatalogAdded && $storeAdded && $catalogAdded) {
-                break;
             }
         }
 
