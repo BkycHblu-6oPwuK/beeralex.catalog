@@ -76,6 +76,7 @@ class BasketUtils
                 'BASE_PRICE_FORMATTED' => $this->priceService->format($basketItem->getBasePrice()),
                 'FULL_PRICE' => $basketItem->getPrice() * $basketItem->getQuantity(),
                 'FULL_PRICE_FORMATTED' => $this->priceService->format($basketItem->getPrice() * $basketItem->getQuantity()),
+                'PRODUCT_PRICE' => $offerInfo['PRICE'] ?? null,
             ];
 
             $basketInfo['URL'] = $productInfo['URL'] ?? $offerInfo['URL'];
