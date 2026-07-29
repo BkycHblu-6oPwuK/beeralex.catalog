@@ -110,8 +110,7 @@ return [
 ### 3. Система Location
 
 - [BitrixLocationResolver](./location.md#bitrixlocationresolver) - определение локации в Bitrix
-- [DadataService](./location.md#dadataservice) - интеграция с DaData API
-- [LocationApiClientContract](./location.md#contracts) - контракт для API клиентов
+- [DadataClient](./location.md#dadataclient) - интеграция с DaData API (`hflabs/dadata`)
 
 ### 4. Расширения Sale
 
@@ -170,8 +169,8 @@ $location = $resolver->getBitrixLocationByAddress('Москва, Красная 
 use Beeralex\Catalog\Options;
 
 $options = service(Options::class);
-$apiKey = $options->apiKey;      // API ключ (например, для DaData)
-$secretKey = $options->secretKey; // Секретный ключ
+$apiKey = $options->dadataApiKey;      // API ключ (токен) DaData
+$secretKey = $options->dadataSecretKey; // Секретный ключ DaData
 ```
 
 ### События (Events)

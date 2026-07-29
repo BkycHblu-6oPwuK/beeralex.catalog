@@ -1,17 +1,18 @@
 # Система Location (Геолокация)
 
-Модуль `beeralex.catalog` включает продвинутую систему определения местоположения, которая интегрируется с внешними API (например, DaData) и преобразует адреса в коды локаций Bitrix.
+Модуль `beeralex.catalog` включает продвинутую систему определения местоположения, которая по умолчанию интегрируется с DaData (`Dadata\DadataClient`) и преобразует адреса в коды локаций Bitrix.
 
 ## Архитектура
 
-Система построена на трех основных компонентах:
+Система построена на двух основных компонентах:
 
-1. **API Client** - взаимодействие с внешними сервисами геолокации
-2. **Parser** - разбор данных от API и извлечение нужной информации
-3. **Resolver** - преобразование данных API в коды локаций Bitrix
+1. **Parser** - разбор данных от API и извлечение нужной информации
+2. **Resolver** - преобразование данных API в коды локаций Bitrix
+
+По умолчанию `BitrixLocationResolver` работает напрямую с `Dadata\DadataClient`. Для смены источника подсказок достаточно унаследовать резолвер и переопределить protected-методы `fetchSuggestions()` и `getParser()` — отдельный интерфейс клиента не требуется.
 
 ```
-Адрес/Координаты → API Client → Parser → Resolver → Код локации Bitrix
+Адрес/Координаты → DadataClient → Parser → Resolver → Код локации Bitrix
 ```
 
 ---
@@ -46,35 +47,6 @@ echo $location->longitude; // 37.622504
 ---
 
 ## Контракты (Interfaces)
-
-### LocationApiClientContract
-
-Интерфейс для клиентов API геолокации.
-
-```php
-interface LocationApiClientContract
-{
-    /**
-     * Получает подсказки адресов по запросу
-     */
-    public function suggestAddress(string $query, int $count = 5): array;
-    
-    /**
-     * Определяет адреса по координатам
-     */
-    public function geolocate(
-        float $lat,
-        float $lon,
-        int $radius = 100,
-        int $count = 3
-    ): array;
-    
-    /**
-     * Возвращает парсер для данных API
-     */
-    public function getParser(): ?LocationDataParserContract;
-}
-```
 
 ### LocationDataParserContract
 
@@ -116,102 +88,13 @@ interface BitrixLocationResolverContract
 
 ---
 
-## DadataService
+## DadataClient
 
 ### Описание
 
-Реализация клиента для API сервиса DaData (dadata.ru). Предоставляет подсказки адресов и геолокацию по координатам.
+Клиент для API сервиса DaData (dadata.ru) из пакета `hflabs/dadata` (`Dadata\DadataClient`). Предоставляет подсказки адресов (`suggest`) и геолокацию по координатам (`geolocate`).
 
-### Конструктор
-
-```php
-public function __construct(
-    string $apiKey,      // API ключ DaData
-    string $secretKey    // Секретный ключ DaData
-)
-```
-
-### Методы
-
-#### suggestAddress()
-
-Получает подсказки адресов по текстовому запросу.
-
-```php
-public function suggestAddress(string $query, int $count = 5): array
-```
-
-**Пример:**
-
-```php
-$dadata = new DadataService($apiKey, $secretKey);
-$suggestions = $dadata->suggestAddress('Москва, Красная', 5);
-
-/*
-[
-    [
-        'value' => 'г Москва, пл Красная',
-        'data' => [
-            'city' => 'Москва',
-            'region' => 'Москва',
-            ...
-        ]
-    ],
-    ...
-]
-*/
-```
-
-#### geolocate()
-
-Определяет адреса по координатам.
-
-```php
-public function geolocate(
-    float $lat,
-    float $lon,
-    int $radius = 100,    // Радиус поиска в метрах
-    int $count = 3        // Количество результатов
-): array
-```
-
-**Пример:**
-
-```php
-$suggestions = $dadata->geolocate(55.753215, 37.622504, 100, 3);
-// Вернет ближайшие адреса к Красной площади
-```
-
-#### getParser()
-
-Возвращает парсер для данных DaData.
-
-```php
-public function getParser(): ?LocationDataParserContract
-```
-
-### Регистрация в DI
-
-```php
-use Beeralex\Catalog\Location\Service\DadataService;
-use Beeralex\Catalog\Location\Contracts\LocationApiClientContract;
-
-return [
-    'services' => [
-        'value' => [
-            LocationApiClientContract::class => [
-                'constructor' => static function() {
-                    $options = service(\Beeralex\Catalog\Options::class);
-                    return new DadataService(
-                        $options->apiKey,
-                        $options->secretKey
-                    );
-                }
-            ]
-        ]
-    ]
-];
-```
+Клиент не регистрируется в DI отдельно — он создаётся внутри `BitrixLocationResolver::getClient()` из настроек модуля (`Options::dadataApiKey`, `Options::dadataSecretKey`). Чтобы подменить клиент — переопределите `getClient()` в наследнике резолвера.
 
 ---
 
@@ -246,7 +129,7 @@ public function parse(array $suggestions): array
 
 ### Описание
 
-Главный класс для определения локации в Bitrix. Использует API клиент (например, DaData) для получения данных о местоположении, а затем ищет соответствующий код локации в справочнике Bitrix.
+Главный класс для определения локации в Bitrix. По умолчанию использует `Dadata\DadataClient` для получения данных о местоположении, а затем ищет соответствующий код локации в справочнике Bitrix. Логика получения подсказок и выбор парсера вынесены в protected-методы, что позволяет наследникам легко подменить источник данных без изменения интерфейса.
 
 ### Особенности
 
@@ -259,9 +142,21 @@ public function parse(array $suggestions): array
 
 ```php
 public function __construct(
-    protected readonly LocationApiClientContract $client,
     protected readonly LocationService $locationService
 )
+```
+
+Клиент в конструктор не передаётся — он получается через метод `getClient()`.
+
+### Метод getClient()
+
+Возвращает клиент для получения подсказок. По умолчанию создаёт `Dadata\DadataClient` из настроек модуля. **Переопределите в наследнике** для использования другого клиента.
+
+```php
+/**
+ * @return DadataClient
+ */
+protected function getClient(): object
 ```
 
 ### Метод getBitrixLocationByAddress()
@@ -316,9 +211,9 @@ $location = $resolver->getBitrixLocationByAddress($coords);
 
 ### Алгоритм работы
 
-1. **Получение данных от API**
-   - Если передан адрес → вызов `suggestAddress()`
-   - Если координаты → вызов `geolocate()`
+1. **Получение данных от API** (метод `fetchSuggestions()`)
+   - Если передан адрес → вызов `$client->suggest('address', ...)`
+   - Если координаты → вызов `$client->geolocate('address', ...)`
 
 2. **Парсинг данных**
    - Извлечение вариантов названий (settlement, city, area, region)
@@ -343,7 +238,23 @@ $location = $resolver->getBitrixLocationByAddress($coords);
 Получает варианты названий из данных API.
 
 ```php
-private function getVariantsFromLocation(string|LocationDTO $location): ?array
+protected function getVariantsFromLocation(string|LocationDTO $location): ?array
+```
+
+#### fetchSuggestions()
+
+Получает подсказки от клиента по адресу или координатам. **Переопределите в наследнике** для использования другого клиента/сервиса.
+
+```php
+protected function fetchSuggestions(string|LocationDTO $location): ?array
+```
+
+#### getParser()
+
+Возвращает парсер ответа клиента в структуру вариантов. **Переопределите в наследнике** при смене клиента.
+
+```php
+protected function getParser(): ?LocationDataParserContract
 ```
 
 #### searchPriority()
@@ -447,8 +358,8 @@ if ($location) {
 
 В административной панели Bitrix → Настройки → Настройки модулей → beeralex.catalog:
 
-- **API_KEY** - API ключ DaData
-- **SECRET_KEY** - Секретный ключ DaData
+- **DADATA_API_KEY** - API ключ (токен) DaData
+- **DADATA_SECRET_KEY** - Секретный ключ DaData
 
 ### Программная настройка
 
@@ -456,8 +367,8 @@ if ($location) {
 use Beeralex\Catalog\Options;
 
 $options = service(Options::class);
-$apiKey = $options->apiKey;
-$secretKey = $options->secretKey;
+$apiKey = $options->dadataApiKey;
+$secretKey = $options->dadataSecretKey;
 ```
 
 ---
@@ -476,53 +387,56 @@ $secretKey = $options->secretKey;
 
 ---
 
-## Создание кастомного API клиента
+## Смена источника подсказок (кастомный клиент)
 
-Вы можете создать свой клиент для другого API (например, Google Maps, Yandex Maps):
+Вместо поддержки отдельного интерфейса клиента, для использования другого API (например, Google Maps, Yandex Maps) достаточно унаследовать `BitrixLocationResolver` и переопределить `getClient()`, `fetchSuggestions()` и `getParser()`:
 
 ```php
 namespace App\Location;
 
-use Beeralex\Catalog\Location\Contracts\LocationApiClientContract;
+use Beeralex\Catalog\Dto\LocationDTO;
+use Beeralex\Catalog\Location\BitrixLocationResolver;
 use Beeralex\Catalog\Location\Contracts\LocationDataParserContract;
 
-class GoogleMapsClient implements LocationApiClientContract
+class GoogleMapsLocationResolver extends BitrixLocationResolver
 {
-    public function __construct(private string $apiKey) {}
-    
-    public function suggestAddress(string $query, int $count = 5): array
+    /**
+     * @return GoogleMapsClient
+     */
+    protected function getClient(): object
     {
-        // Ваша реализация через Google Maps API
-        $url = "https://maps.googleapis.com/maps/api/geocode/json";
-        // ...
-        return $results;
+        return new GoogleMapsClient(/* ... */);
     }
-    
-    public function geolocate(float $lat, float $lon, int $radius = 100, int $count = 3): array
+
+    protected function fetchSuggestions(string|LocationDTO $location): ?array
     {
-        // Ваша реализация
-        return $results;
+        // Ваша реализация через $this->getClient()
+        // верните массив подсказок или null
+        return $suggestions;
     }
-    
-    public function getParser(): ?LocationDataParserContract
+
+    protected function getParser(): ?LocationDataParserContract
     {
         return new GoogleMapsParser();
     }
 }
 ```
 
-Затем зарегистрируйте в DI:
+Затем переопределите привязку резолвера в DI:
 
 ```php
-use App\Location\GoogleMapsClient;
-use Beeralex\Catalog\Location\Contracts\LocationApiClientContract;
+use App\Location\GoogleMapsLocationResolver;
+use Beeralex\Catalog\Location\Contracts\BitrixLocationResolverContract;
+use Beeralex\Core\Service\LocationService;
 
 return [
     'services' => [
         'value' => [
-            LocationApiClientContract::class => [
+            BitrixLocationResolverContract::class => [
                 'constructor' => static function() {
-                    return new GoogleMapsClient('YOUR_GOOGLE_API_KEY');
+                    return new GoogleMapsLocationResolver(
+                        locationService: service(LocationService::class)
+                    );
                 }
             ]
         ]

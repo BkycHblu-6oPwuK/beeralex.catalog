@@ -4,7 +4,6 @@ namespace Beeralex\Catalog\Repository;
 
 use Beeralex\Core\Repository\Repository;
 use Bitrix\Catalog\GroupTable;
-use Bitrix\Main\Loader;
 
 class PriceTypeRepository extends Repository
 {

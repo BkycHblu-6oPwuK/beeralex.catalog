@@ -95,8 +95,7 @@ return [
 - `PriceService` - расчет и форматирование цен
 
 ### Геолокация
-- `BitrixLocationResolver` - определение локации в Bitrix
-- `DadataService` - интеграция с DaData API
+- `BitrixLocationResolver` - определение локации в Bitrix (по умолчанию через `Dadata\DadataClient`)
 
 ### Расширения Sale
 - `PrepaymentCheck` - исправленный чек частичной предоплаты

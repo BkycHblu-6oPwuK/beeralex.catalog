@@ -7,13 +7,13 @@ use Beeralex\Core\Config\AbstractOptions;
 
 final class Options extends AbstractOptions
 {
-    public readonly string $apiKey;
-    public readonly string $secretKey;
+    public readonly string $dadataApiKey;
+    public readonly string $dadataSecretKey;
 
     protected function mapOptions(array $options): void
     {
-        $this->apiKey = (string)($options['api_key'] ?? '');
-        $this->secretKey = (string)($options['secret_key'] ?? '');
+        $this->dadataApiKey = (string)($options['dadata_api_key'] ?? '');
+        $this->dadataSecretKey = (string)($options['dadata_secret_key'] ?? '');
     }
 
     public function getModuleId(): string

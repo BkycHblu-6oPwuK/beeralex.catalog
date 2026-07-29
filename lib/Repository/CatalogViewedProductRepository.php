@@ -4,7 +4,6 @@ namespace Beeralex\Catalog\Repository;
 
 use Beeralex\Core\Repository\Repository;
 use Bitrix\Catalog\CatalogViewedProductTable;
-use Bitrix\Main\Loader;
 
 /**
  * @property CatalogViewedProductTable $entityClass

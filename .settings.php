@@ -5,8 +5,6 @@ use Beeralex\Catalog\Contracts\StoreRepositoryContract;
 use Beeralex\Catalog\Enum\DIServiceKey;
 use Beeralex\Catalog\Location\BitrixLocationResolver;
 use Beeralex\Catalog\Location\Contracts\BitrixLocationResolverContract;
-use Beeralex\Catalog\Location\Contracts\LocationApiClientContract;
-use Beeralex\Catalog\Location\Service\DadataService;
 use Beeralex\Catalog\Repository\CatalogViewedProductRepository;
 use Beeralex\Catalog\Repository\EmptyOffersRepository;
 use Beeralex\Catalog\Repository\OffersRepository;
@@ -37,6 +35,7 @@ use Beeralex\Core\Service\SortingService;
 use Beeralex\Core\Service\UrlService;
 use Beeralex\Catalog\Repository\EmptySortingRepository;
 use Bitrix\Main\Loader;
+use Dadata\DadataClient;
 
 return [
     'services' => [
@@ -194,19 +193,9 @@ return [
                     );
                 }
             ],
-            LocationApiClientContract::class => [
-                'constructor' => static function () {
-                    $options = \service(Options::class);
-                    return new DadataService(
-                        apiKey: $options->apiKey,
-                        secretKey: $options->secretKey
-                    );
-                },
-            ],
             BitrixLocationResolverContract::class => [
                 'constructor' => static function () {
                     return new BitrixLocationResolver(
-                        client: service(LocationApiClientContract::class),
                         locationService: service(LocationService::class)
                     );
                 }
@@ -231,6 +220,12 @@ return [
                         discountFactory: service(DiscountFactory::class),
                         fuserRepository: service(FuserRepository::class)
                     );
+                }
+            ],
+            DadataClient::class => [
+                'constructor' => static function () {
+                    $options = service(Options::class);
+                    return new DadataClient($options->dadataApiKey, $options->dadataSecretKey);
                 }
             ],
         ],

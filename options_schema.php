@@ -8,17 +8,17 @@ return Schema::make()
     ->tab(
         'edit2',
         'Локации',
-        'Настройки клиента',
+        'Настройки Dadata',
         function (SchemaTab $tab) {
             $tab->input(
-                'API_KEY',
-                'Ключ api для доступа к сервису локаций (если есть)',
+                'DADATA_API_KEY',
+                'Ключ API Dadata (токен)',
                 ''
             );
 
             $tab->input(
-                'SECRET_KEY',
-                'Секретный ключ api для доступа к сервису локаций (если есть)',
+                'DADATA_SECRET_KEY',
+                'Секретный ключ API Dadata',
             );
         }
     );

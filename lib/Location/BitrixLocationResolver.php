@@ -3,12 +3,14 @@
 namespace Beeralex\Catalog\Location;
 
 use Beeralex\Catalog\Dto\LocationDTO;
-use Beeralex\Catalog\Location\Contracts\LocationApiClientContract;
 use Beeralex\Catalog\Location\Contracts\BitrixLocationResolverContract;
+use Beeralex\Catalog\Location\Contracts\LocationDataParserContract;
+use Beeralex\Catalog\Location\Service\Parser\DadataLocationParser;
 use Beeralex\Core\Traits\Cacheable;
 use Bitrix\Main\Web\Json;
 use Beeralex\Core\Dto\CacheSettingsDTO;
 use Beeralex\Core\Service\LocationService;
+use Dadata\DadataClient;
 
 use function Beeralex\Catalog\log;
 
@@ -17,7 +19,6 @@ class BitrixLocationResolver implements BitrixLocationResolverContract
     use Cacheable;
 
     public function __construct(
-        protected readonly LocationApiClientContract $client,
         protected readonly LocationService $locationService,
     ) {}
 
@@ -49,20 +50,53 @@ class BitrixLocationResolver implements BitrixLocationResolverContract
         }
     }
 
-    private function getVariantsFromLocation(string|LocationDTO $location): ?array
+    protected function getVariantsFromLocation(string|LocationDTO $location): ?array
     {
-        $parser = $this->client->getParser();
+        $parser = $this->getParser();
         if ($parser === null) {
             return null;
         }
-        if (is_string($location)) {
-            $suggestions = $this->client->suggestAddress($location, 5);
-        } elseif ($location->latitude && $location->longitude) {
-            $suggestions = $this->client->geolocate($location->latitude, $location->longitude, 100, 3);
-        } else {
+        $suggestions = $this->fetchSuggestions($location);
+        if ($suggestions === null) {
             return null;
         }
         return $parser->parse($suggestions);
+    }
+
+    /**
+     * Получает подсказки от клиента по адресу или координатам.
+     * Переопределите в наследнике для использования другого клиента/сервиса.
+     */
+    protected function fetchSuggestions(string|LocationDTO $location): ?array
+    {
+        $client = $this->getClient();
+        if (is_string($location)) {
+            return $client->suggest('address', $location, 5);
+        }
+        if ($location->latitude && $location->longitude) {
+            return $client->geolocate('address', $location->latitude, $location->longitude, 100, 3);
+        }
+        return null;
+    }
+
+    /**
+     * Возвращает клиент для получения подсказок.
+     * Переопределите в наследнике для использования другого клиента/сервиса.
+     *
+     * @return DadataClient
+     */
+    protected function getClient(): object
+    {
+        return service(DadataClient::class);
+    }
+
+    /**
+     * Возвращает парсер ответа клиента в структуру вариантов.
+     * Переопределите в наследнике при смене клиента.
+     */
+    protected function getParser(): ?LocationDataParserContract
+    {
+        return new DadataLocationParser();
     }
 
     private function searchPriority(array $groups): array

@@ -3,7 +3,6 @@ declare(strict_types=1);
 namespace Beeralex\Catalog\Service\Discount;
 
 use Bitrix\Main\Context;
-use Bitrix\Main\Loader;
 use Bitrix\Sale\BasketBase;
 use Bitrix\Sale\Discount as SaleDiscount;
 use Bitrix\Sale\Order;
