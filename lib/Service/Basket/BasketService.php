@@ -144,12 +144,18 @@ class BasketService
     {
         $items = $this->getItems();
 
-        $totalQuantity = $this->getOffersQuantity();
+        $totalQuantity = 0;
+        $totalPositionQuantity = 0;
         $totalPrice = 0;
         $totalDiscount = 0;
         $coupon = $this->couponsService->getApplyedCoupon();
         foreach ($items as $item) {
+            if($item['CAN_BUY'] === false || $item['ACTIVE'] === false || $item['CATALOG']['AVAILABLE'] === false) {
+                continue;
+            }
             $totalPrice += $item['FULL_PRICE'];
+            $totalQuantity += $item['QUANTITY'];
+            $totalPositionQuantity++;
             if ($item['FULL_OLD_PRICE'] !== null) {
                 $totalDiscount += $item['FULL_OLD_PRICE'] - $item['FULL_PRICE'];
             }
@@ -160,6 +166,7 @@ class BasketService
             'COUPON' => $coupon,
             'SUMMARY' => [
                 'TOTAL_QUANTITY' => $totalQuantity,
+                'TOTAL_POSITION_QUANTITY' => $totalPositionQuantity,
                 'TOTAL_PRICE' => $totalPrice,
                 'TOTAL_PRICE_FORMATTED' => $this->priceService->format($totalPrice),
                 'TOTAL_DISCOUNT' => $totalDiscount,
@@ -204,11 +211,6 @@ class BasketService
     public function getExistBasketItems(int $offerId): array
     {
         return $this->basket->getExistsItems($this->basketModuleId, $offerId, null);
-    }
-
-    public function getOffersQuantity(): int
-    {
-        return count($this->basket->getBasketItems());
     }
 
     public function getBasket(): BasketBase

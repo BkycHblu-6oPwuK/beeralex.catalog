@@ -20,7 +20,7 @@ class CatalogViewedProductRepository extends Repository
      */
     public function getViewedProductIds(int $iblockId, int $userId, int $currentElementId, int $limit = 15): array
     {
-        return array_values($this->entityClass->getProductSkuMap(
+        return array_values($this->entityClass::getProductSkuMap(
             $iblockId,
             0,
             $userId,
