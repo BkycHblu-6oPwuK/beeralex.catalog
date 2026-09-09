@@ -147,6 +147,7 @@ class BasketService
         $totalQuantity = 0;
         $totalPositionQuantity = 0;
         $totalPrice = 0;
+        $totalPriceWithoutDiscount = 0;
         $totalDiscount = 0;
         $coupon = $this->couponsService->getApplyedCoupon();
         foreach ($items as $item) {
@@ -157,7 +158,10 @@ class BasketService
             $totalQuantity += $item['QUANTITY'];
             $totalPositionQuantity++;
             if ($item['FULL_OLD_PRICE'] !== null) {
+                $totalPriceWithoutDiscount += $item['FULL_OLD_PRICE'];
                 $totalDiscount += $item['FULL_OLD_PRICE'] - $item['FULL_PRICE'];
+            } else {
+                $totalPriceWithoutDiscount += $item['FULL_PRICE'];
             }
         }
 
@@ -169,6 +173,8 @@ class BasketService
                 'TOTAL_POSITION_QUANTITY' => $totalPositionQuantity,
                 'TOTAL_PRICE' => $totalPrice,
                 'TOTAL_PRICE_FORMATTED' => $this->priceService->format($totalPrice),
+                'TOTAL_PRICE_WITHOUT_DISCOUNT' => $totalPriceWithoutDiscount,
+                'TOTAL_PRICE_WITHOUT_DISCOUNT_FORMATTED' => $this->priceService->format($totalPriceWithoutDiscount),
                 'TOTAL_DISCOUNT' => $totalDiscount,
                 'TOTAL_DISCOUNT_FORMATTED' => $this->priceService->format($totalDiscount)
             ]
