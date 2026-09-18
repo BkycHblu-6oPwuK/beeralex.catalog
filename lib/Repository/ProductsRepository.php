@@ -58,9 +58,22 @@ class ProductsRepository extends AbstractCatalogRepository implements ProductRep
      */
     public function getAvailableProductIds(array $filter = []): array
     {
-        $query = $this->query()
+        $query = $this->catalogService->addCatalogToQuery($this->query())
             ->setSelect(['ID'])
             ->setFilter(array_merge(['ACTIVE' => 'Y', 'CATALOG.AVAILABLE' => 'Y'], $filter));
+
+        if (isset($filter['ID'])) {
+            $productsIds = $filter['ID'];
+            $query = $query
+                ->registerRuntimeField(
+                    new \Bitrix\Main\Entity\ExpressionField(
+                        'SORT',
+                        'FIELD(%s, ' . implode(',', $productsIds) . ')',
+                        ['ID']
+                    )
+                )
+                ->setOrder(['SORT' => 'asc']);
+        }
 
         $ids = [];
         $res = $query->exec();
