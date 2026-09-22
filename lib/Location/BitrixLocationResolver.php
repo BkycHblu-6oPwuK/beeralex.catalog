@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 namespace Beeralex\Catalog\Location;
 
@@ -9,6 +10,7 @@ use Beeralex\Catalog\Location\Service\Parser\DadataLocationParser;
 use Beeralex\Core\Traits\Cacheable;
 use Bitrix\Main\Web\Json;
 use Beeralex\Core\Dto\CacheSettingsDTO;
+use Beeralex\Core\Enum\Locations;
 use Beeralex\Core\Service\LocationService;
 use Dadata\DadataClient;
 
@@ -23,9 +25,26 @@ class BitrixLocationResolver implements BitrixLocationResolverContract
     ) {}
 
     /**
-     * Возвращает данные местоположения из Битрикс по адресу или координатам
+     * Возвращает клиент для получения подсказок.
+     * Переопределите в наследнике для использования другого клиента/сервиса.
+     *
+     * @return DadataClient
      */
-    public function getBitrixLocationByAddress(string|LocationDTO $location): ?array
+    protected function getClient(): object
+    {
+        return service(DadataClient::class);
+    }
+
+    /**
+     * Возвращает парсер ответа клиента в структуру вариантов.
+     * @return DadataLocationParser|null
+     */
+    protected function getParser(): ?LocationDataParserContract
+    {
+        return new DadataLocationParser();
+    }
+
+    public function getBitrixLocationByAddress(string|LocationDTO $location): ?string
     {
         $cacheKey = is_string($location) ? $location : Json::encode($location);
         $cacheSettings = new CacheSettingsDTO(3600000, md5($cacheKey), 'beeralex.catalog/location');
@@ -36,13 +55,20 @@ class BitrixLocationResolver implements BitrixLocationResolverContract
                     return null;
                 }
                 [$settlementVariants, $cityVariants, $areaVariants, $regionVariants] = $variants;
-                $foundItems = $this->searchPriority([$settlementVariants, $cityVariants, $areaVariants, $regionVariants,]);
-                if (empty($foundItems)) {
-                    return null;
-                }
-                $matched = $this->matchRegionAndArea($foundItems, $regionVariants, $areaVariants);
-                $final = $matched ?: reset($foundItems);
-                return ['city' => $final['DISPLAY'] ?? $cityVariants[0] ?? null, 'code' => $final['CODE'] ?? null, 'area' => $areaVariants[0] ?? null, 'region' => $regionVariants[0] ?? null,];
+
+                $groupsMap     = $this->locationService->getGroupMap();
+                $regionType    = $groupsMap[Locations::REGION->name];
+                $subregionType = $groupsMap[Locations::SUBREGION->name];
+
+                $groups = [
+                    $groupsMap[Locations::VILLAGE->name] => $settlementVariants,
+                    $groupsMap[Locations::CITY->name]    => $cityVariants,
+                    $subregionType                        => $areaVariants,
+                    $regionType                            => $regionVariants,
+                ];
+
+                $final = $this->findBestLocation($groups, $regionVariants, $areaVariants, $regionType, $subregionType);
+                return $final['CODE'] ?? null;
             });
         } catch (\Throwable $e) {
             log("BitrixLocationResolver error: " . $e->getMessage());
@@ -63,10 +89,6 @@ class BitrixLocationResolver implements BitrixLocationResolverContract
         return $parser->parse($suggestions);
     }
 
-    /**
-     * Получает подсказки от клиента по адресу или координатам.
-     * Переопределите в наследнике для использования другого клиента/сервиса.
-     */
     protected function fetchSuggestions(string|LocationDTO $location): ?array
     {
         $client = $this->getClient();
@@ -80,63 +102,202 @@ class BitrixLocationResolver implements BitrixLocationResolverContract
     }
 
     /**
-     * Возвращает клиент для получения подсказок.
-     * Переопределите в наследнике для использования другого клиента/сервиса.
-     *
-     * @return DadataClient
+     * Идёт от самого специфичного уровня (settlement) к самому общему (region).
+     * На каждом уровне ищет кандидата и сразу пытается подтвердить его
+     * регионом/областью из Dadata. Первый подтверждённый — сразу побеждает.
+     * Если ни один уровень не подтверждён — возвращает кандидата
+     * с самого специфичного уровня, где хоть что-то нашлось (fallback).
      */
-    protected function getClient(): object
-    {
-        return service(DadataClient::class);
+    private function findBestLocation(
+        array $groups,
+        array $regionVariants,
+        array $areaVariants,
+        int $regionType,
+        int $subregionType
+    ): ?array {
+        $fallback = null;
+
+        foreach ($groups as $expectedType => $nameVariants) {
+            if (empty($nameVariants)) {
+                continue;
+            }
+
+            $items = $this->searchInBitrix($nameVariants);
+            if (empty($items)) {
+                continue;
+            }
+
+            $result = $this->resolveLevel(
+                $items,
+                $expectedType,
+                $nameVariants,
+                $expectedType === $regionType ? [] : $regionVariants,
+                $expectedType === $subregionType ? [] : $areaVariants,
+            );
+
+            if ($result['candidate'] === null) {
+                continue;
+            }
+            if ($result['confirmed']) {
+                return $result['candidate'];
+            }
+
+            $fallback ??= $result['candidate'];
+        }
+
+        return $fallback;
     }
 
     /**
-     * Возвращает парсер ответа клиента в структуру вариантов.
-     * Переопределите в наследнике при смене клиента.
+     * Находит кандидата на данном уровне и определяет, подтверждён ли он
+     * регионом/областью. Если проверять нечем (пустые $regionVariants
+     * и $areaVariants — обычно потому что это сам регион/область,
+     * либо Dadata их не вернула) — кандидат считается подтверждённым
+     * по имени.
+     *
+     * @return array{candidate: ?array, confirmed: bool}
      */
-    protected function getParser(): ?LocationDataParserContract
-    {
-        return new DadataLocationParser();
+    private function resolveLevel(
+        array $items,
+        int $expectedType,
+        array $nameVariants,
+        array $regionVariants,
+        array $areaVariants
+    ): array {
+        $named = $this->filterByName($this->collectTypedNodes($items, $expectedType), $nameVariants);
+        if (empty($named)) {
+            return ['candidate' => null, 'confirmed' => false];
+        }
+
+        $hasCheckData = !empty($regionVariants) || !empty($areaVariants);
+        $matched = $hasCheckData ? $this->matchRegionAndArea($named, $regionVariants, $areaVariants) : null;
+
+        return [
+            'candidate' => $matched ?? reset($named),
+            'confirmed' => $matched !== null || !$hasCheckData,
+        ];
     }
 
-    private function searchPriority(array $groups): array
+    private function filterByName(array $nodes, array $nameVariants): array
     {
-        foreach ($groups as $variants) {
-            $items = $this->searchInBitrix($variants);
-            if (!empty($items)) {
-                return $items;
-            }
+        $nameLower = array_values(array_filter(
+            array_map(fn($v) => mb_strtolower(trim($v)), $nameVariants),
+            fn($v) => $v !== ''
+        ));
+        if (empty($nameLower)) {
+            return [];
         }
-        return [];
+
+        $exact = array_values(array_filter(
+            $nodes,
+            fn($n) => in_array(mb_strtolower(trim($n['DISPLAY'] ?? '')), $nameLower, true)
+        ));
+        if (!empty($exact)) {
+            return $exact;
+        }
+
+        return array_values(array_filter($nodes, function ($n) use ($nameLower) {
+            $display = mb_strtolower(trim($n['DISPLAY'] ?? ''));
+            if ($display === '') {
+                return false;
+            }
+            foreach ($nameLower as $name) {
+                if (str_contains($display, $name)) {
+                    return true;
+                }
+            }
+            return false;
+        }));
     }
 
     private function searchInBitrix(array $variants): array
     {
+        $collected = [];
+        $seenCodes = [];
+
         foreach ($variants as $variant) {
             $variant = trim(mb_strtolower($variant));
-            if ($variant === '') continue;
-            $items = $this->locationService->find($variant, 20, 0);
-            if (!empty($items)) {
-                return $items;
+            if ($variant === '') {
+                continue;
+            }
+
+            foreach ($this->locationService->find($variant, 25, 0) as $item) {
+                $code = $item['CODE'] ?? null;
+                if ($code === null || isset($seenCodes[$code])) {
+                    continue;
+                }
+                $seenCodes[$code] = true;
+                $collected[] = $item;
             }
         }
-        return [];
+
+        return $collected;
+    }
+
+    /**
+     * Собирает уникальные узлы нужного типа (TYPE_ID === $expectedType) —
+     * как сами найденные элементы, так и узлы из их PATH.
+     */
+    private function collectTypedNodes(array $items, int $expectedType): array
+    {
+        $nodes = [];
+        $seenCodes = [];
+
+        foreach ($items as $item) {
+            $this->addTypedNode($item, null, $expectedType, $nodes, $seenCodes);
+
+            foreach ($item['PATH'] ?? [] as $i => $pathNode) {
+                $this->addTypedNode(
+                    $pathNode,
+                    array_slice($item['PATH'], $i + 1),
+                    $expectedType,
+                    $nodes,
+                    $seenCodes
+                );
+            }
+        }
+
+        return $nodes;
+    }
+
+    private function addTypedNode(
+        array $node,
+        ?array $path,
+        int $expectedType,
+        array &$nodes,
+        array &$seenCodes
+    ): void {
+        if ((int)($node['TYPE_ID'] ?? -1) !== $expectedType) {
+            return;
+        }
+
+        $code = $node['CODE'] ?? null;
+        if ($code === null || isset($seenCodes[$code])) {
+            return;
+        }
+
+        $seenCodes[$code] = true;
+        if ($path !== null) {
+            $node['PATH'] = $path;
+        }
+        $nodes[] = $node;
     }
 
     private function matchRegionAndArea(array $items, array $regionVariants, array $areaVariants): ?array
     {
         foreach ($regionVariants as $regionVariant) {
             $regionLower = mb_strtolower(trim($regionVariant));
-            if ($regionLower === '') continue;
+            if ($regionLower === '') {
+                continue;
+            }
             foreach ($items as $item) {
-                foreach ($item['PATH'] ?? [] as $path) {
-                    if (isset($path['DISPLAY']) && str_contains(mb_strtolower($path['DISPLAY']), $regionLower)) {
-                        if ($this->matchArea($item, $areaVariants)) {
-                            return $item;
-                        }
-                        return $item;
-                    }
+                if (!$this->pathContains($item, $regionLower)) {
+                    continue;
                 }
+                if (!empty($areaVariants) && !$this->matchArea($item, $areaVariants)) {
+                    continue;
+                }
+                return $item;
             }
         }
         return null;
@@ -146,11 +307,21 @@ class BitrixLocationResolver implements BitrixLocationResolverContract
     {
         foreach ($areaVariants as $areaVariant) {
             $areaLower = mb_strtolower(trim($areaVariant));
-            if ($areaLower === '') continue;
-            foreach ($item['PATH'] ?? [] as $path) {
-                if (isset($path['DISPLAY']) && str_contains(mb_strtolower($path['DISPLAY']), $areaLower)) {
-                    return true;
-                }
+            if ($areaLower === '') {
+                continue;
+            }
+            if ($this->pathContains($item, $areaLower)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function pathContains(array $item, string $needleLower): bool
+    {
+        foreach ($item['PATH'] ?? [] as $path) {
+            if (isset($path['DISPLAY']) && str_contains(mb_strtolower($path['DISPLAY']), $needleLower)) {
+                return true;
             }
         }
         return false;

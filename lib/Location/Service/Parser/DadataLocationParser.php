@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 namespace Beeralex\Catalog\Location\Service\Parser;
 
@@ -6,37 +7,39 @@ use Beeralex\Catalog\Location\Contracts\LocationDataParserContract;
 
 class DadataLocationParser implements LocationDataParserContract
 {
-    /**
-     * Parses the data from the location API into a structured array of variants.
-     */
     public function parse(array $suggestions): array
     {
-        $getVariants = function (?string $settlement, ?string $city, ?string $area, ?string $region) {
-            $settlementVariants = $this->makeName($settlement, 'населенный пункт', 'пункт');
-            $cityVariants = $this->makeName($city, 'город', 'город');
-            $areaVariants = $this->makeName($area, 'район', 'район');
-            $regionVariants = $this->makeName($region, 'область', 'область');
-            return [$settlementVariants, $cityVariants, $areaVariants, $regionVariants,];
-        };
         foreach ($suggestions as $s) {
             if (!isset($s['data'])) {
                 continue;
             }
-            $variants = $getVariants($s['data']['settlement'] ?? null, $s['data']['city'] ?? null, $s['data']['area'] ?? null, $s['data']['region'] ?? null);
-            if (!empty($variants[0]) || !empty($variants[1])) {
-                return $variants;
+
+            $data = $s['data'];
+
+            $settlementVariants = $this->makeName($data['settlement'] ?? null, null, $data['settlement_type_full'] ?? null);
+            $cityVariants       = $this->makeName($data['city'] ?? null, null, $data['city_type_full'] ?? null);
+            $areaVariants       = $this->makeName($data['area'] ?? null, $data['area_type'] ?? null, $data['area_type_full'] ?? null);
+            $regionVariants     = $this->makeName($data['region'] ?? null, $data['region_type'] ?? null, $data['region_type_full'] ?? null);
+
+            if (!empty($settlementVariants) || !empty($cityVariants) || !empty($areaVariants) || !empty($regionVariants)) {
+                return [$settlementVariants, $cityVariants, $areaVariants, $regionVariants];
             }
         }
+
         return [[], [], [], []];
     }
 
-    private function makeName(?string $base, string $type, string $typeFull): array
+    private function makeName(?string $base, ?string $type = null, ?string $typeFull = null): array
     {
-        if (!$base) return [];
-        $variants = [trim("$base $typeFull"), trim("$typeFull $base"), trim("$base $type"), trim("$type $base"), $base,];
-        if ($typeFull === 'город') {
-            array_unshift($variants, $base);
+        $base = $base !== null ? trim($base) : null;
+        if (!$base) {
+            return [];
         }
-        return array_unique(array_filter($variants));
+
+        return array_values(array_unique(array_filter([
+            $base,
+            $typeFull ? trim("$base $typeFull") : null,
+            $type ? trim("$base $type") : null,
+        ])));
     }
 }

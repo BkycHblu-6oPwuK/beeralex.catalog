@@ -34,6 +34,7 @@ use Beeralex\Core\Service\LocationService;
 use Beeralex\Core\Service\SortingService;
 use Beeralex\Core\Service\UrlService;
 use Beeralex\Catalog\Repository\EmptySortingRepository;
+use Beeralex\Catalog\Repository\StoreRepository;
 use Bitrix\Main\Loader;
 use Dadata\DadataClient;
 
@@ -82,7 +83,7 @@ return [
                 'className' => CatalogViewedProductRepository::class,
             ],
             StoreRepositoryContract::class => [
-                'className' => StoreRepositoryContract::class,
+                'className' => StoreRepository::class,
             ],
             PersonTypeRepository::class => [
                 'className' => PersonTypeRepository::class,
