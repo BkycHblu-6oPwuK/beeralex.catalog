@@ -18,6 +18,6 @@ interface ProductRepositoryContract extends IblockRepositoryContract
     public function getNewProductsIds(int $limit = 15, int $cacheTtl = 0, int $countMonts = 1): array;
     public function getPopularProductsIds(int $limit = 15, int $cacheTtl = 0): array;
     public function getSameProductsIds(int $elementId, int $sectionId, int $limit = 15, int $cacheTtl = 0): array;
-    public function getAvailableProductIds(array $filter = []): array;
+    public function getAvailableProductIds(array $filter = [], int $limit = 0, int $cacheTtl = 0): array;
     public function getViewedProductsIds(int $currentElementId): array;
 }

@@ -6,6 +6,7 @@ namespace Beeralex\Catalog\Repository;
 
 use Beeralex\Catalog\Contracts\ProductRepositoryContract;
 use Beeralex\Core\Service\CatalogService;
+use Bitrix\Main\ORM\Fields\ExpressionField;
 use Beeralex\Core\Service\UrlService;
 
 class ProductsRepository extends AbstractCatalogRepository implements ProductRepositoryContract
@@ -56,17 +57,21 @@ class ProductsRepository extends AbstractCatalogRepository implements ProductRep
     /**
      * Возвращает список ID активных и доступных товаров.
      */
-    public function getAvailableProductIds(array $filter = []): array
+    public function getAvailableProductIds(array $filter = [], int $limit = 0, int $cacheTtl = 0): array
     {
         $query = $this->catalogService->addCatalogToQuery($this->query())
             ->setSelect(['ID'])
-            ->setFilter(array_merge(['ACTIVE' => 'Y', 'CATALOG.AVAILABLE' => 'Y'], $filter));
+            ->setFilter(array_merge(['ACTIVE' => 'Y', 'CATALOG.AVAILABLE' => 'Y'], $filter))
+            ->setOrder(['ID' => 'asc'])
+            ->setLimit($limit)
+            ->setCacheTtl($cacheTtl)
+            ->cacheJoins(true);
 
         if (isset($filter['ID'])) {
             $productsIds = $filter['ID'];
             $query = $query
                 ->registerRuntimeField(
-                    new \Bitrix\Main\Entity\ExpressionField(
+                    new ExpressionField(
                         'SORT',
                         'FIELD(%s, ' . implode(',', $productsIds) . ')',
                         ['ID']
