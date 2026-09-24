@@ -6,6 +6,7 @@ namespace Beeralex\Catalog\Repository;
 
 use Beeralex\Core\Repository\IblockRepository;
 use Beeralex\Core\Service\CatalogService;
+use Beeralex\Core\Service\IblockService;
 use Beeralex\Core\Service\UrlService;
 use Bitrix\Iblock\ORM\Query;
 
@@ -29,6 +30,7 @@ abstract class AbstractCatalogRepository extends IblockRepository
      *                      - 'PRICE' : подгрузить цены
      *                      - 'PRICE.CATALOG_GROUP' : подгрузить группы цен
      *                      - 'STORE_PRODUCT' : подгрузить остатки по складам
+     *                      - 'IBLOCK_MODEL_SECTION' : подгрузить модель раздела инфоблока
      * @param array $order Сортировка
      * @param int|null $limit Лимит
      * @param int|null $offset Смещение
@@ -62,7 +64,7 @@ abstract class AbstractCatalogRepository extends IblockRepository
             $select = ['*'];
         }
         if ($select === ['*']) {
-            $select = ['*', 'PRICE', 'PRICE.CATALOG_GROUP', 'STORE_PRODUCT', 'CATALOG'];
+            $select = ['*', 'PRICE', 'PRICE.CATALOG_GROUP', 'STORE_PRODUCT', 'CATALOG', 'IBLOCK_MODEL_SECTION'];
         }
         $select = array_merge($select, ['IBLOCK.DETAIL_PAGE_URL', 'CODE', 'ID', 'IBLOCK_SECTION_ID']);
         $query = $this->query();
@@ -70,6 +72,7 @@ abstract class AbstractCatalogRepository extends IblockRepository
         $priceCatalogAdded = false;
         $storeAdded = false;
         $catalogAdded = false;
+        $sectionAdded = false;
         $joinFields = array_merge(
             array_values($select),
             array_keys($filter),
@@ -81,7 +84,7 @@ abstract class AbstractCatalogRepository extends IblockRepository
         );
 
         foreach ($joinFields as $field) {
-            if ($priceAdded && $priceCatalogAdded && $storeAdded && $catalogAdded) {
+            if ($priceAdded && $priceCatalogAdded && $storeAdded && $catalogAdded && $sectionAdded) {
                 break;
             }
             if ($priceAdded === false && ($field === 'PRICE' || strstr($field, 'PRICE.'))) {
@@ -96,6 +99,9 @@ abstract class AbstractCatalogRepository extends IblockRepository
             } elseif ($catalogAdded === false && ($field === 'CATALOG' || strstr($field, 'CATALOG.'))) {
                 $query = $this->catalogService->addCatalogToQuery($query);
                 $catalogAdded = true;
+            } elseif ($sectionAdded === false && ($field === 'IBLOCK_MODEL_SECTION' || strstr($field, 'IBLOCK_MODEL_SECTION.'))) {
+                $query = $this->addSectionModelToQuery($query);
+                $sectionAdded = true;
             }
         }
 
