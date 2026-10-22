@@ -22,49 +22,96 @@ class CatalogService extends CoreCatalogService
         protected readonly SortingService $sortingService,
         protected readonly DiscountFactory $discountFactory,
         protected readonly CatalogSectionsService $catalogSectionsService,
-        protected readonly SearchService $searchService
+        protected readonly SearchService $searchService,
+        protected readonly PropertyService $propertyService,
     ) {}
 
     /**
      * Возвращает товары с их предложениями (и опционально скидками).
      */
-    public function getProductsWithOffers(array $productIds, bool $isAvailable = true, bool $applyDiscounts = false): array
-    {
+    public function getProductsWithOffers(
+        array $productIds,
+        bool $isAvailable = true,
+        bool $applyDiscounts = false,
+        bool $withProperties = false,
+        bool $withOfferTree = false,
+    ): array {
         if (empty($productIds)) {
             return [];
         }
 
         $products = $this->productsRepository->getProducts($productIds, $isAvailable);
         $offersByProduct = $this->offersRepository->getOffersByProductIds($productIds, $isAvailable);
+
         foreach ($products as &$product) {
             $offers = $offersByProduct[$product['ID']] ?? [];
             $productUrl = $product['DETAIL_PAGE_URL'] ?? '';
-            if (empty($offers)) {
-                continue;
-            }
 
-            $product['OFFERS'] = array_map(function ($offer) use ($productUrl) {
-                $offerUrlTemplate = $offer['IBLOCK']['DETAIL_PAGE_URL'] ?? '';
-                $offerUrl = null;
-                if($offerUrlTemplate) {
-                    $offerUrl = str_replace(
-                        ['#PRODUCT_URL#', '#CODE#', '#ID#'],
-                        [$productUrl, $offer['CODE'], $offer['ID']],
-                        $offerUrlTemplate
-                    );
-                }
-                $offer['DETAIL_PAGE_URL'] = $offerUrl;
-                return $offer;
-            }, $offers);
+            $product['OFFERS'] = array_map(fn($offer) => $this->withOfferUrl($offer, $productUrl), $offers);
+        }
+        unset($product);
 
-            $product['PRESELECTED_OFFER'] = $product['OFFERS'][0];
+        if ($withProperties || $withOfferTree) {
+            $this->propertyService->attachProperties($products);
         }
 
         if ($applyDiscounts) {
             $this->applyDiscounts($products);
         }
 
+        foreach ($products as &$product) {
+            if ($withOfferTree) {
+                $product['OFFER_TREE'] = $this->propertyService->buildOfferTree($product['OFFERS']);
+            }
+            $this->setPreselectedOffer($product, null);
+        }
+        unset($product);
+
         return $products;
+    }
+
+    /**
+     * Возвращает данные одного товара с его предложениями (и опционально скидками).
+     */
+    public function getProduct(int $productId, ?int $offerId = null, bool $applyDiscounts = true): array
+    {
+        $products = $this->getProductsWithOffers([$productId], true, $applyDiscounts, true, true);
+        $product = $products[$productId] ?? (reset($products) ?: null);
+        if (!$product) {
+            return [];
+        }
+
+        $this->setPreselectedOffer($product, $offerId);
+
+        return $product;
+    }
+
+    protected function setPreselectedOffer(array &$product, ?int $offerId): void
+    {
+        $offers = $product['OFFERS'] ?? [];
+        $selected = $offers[0] ?? [];
+
+        if ($offerId !== null) {
+            foreach ($offers as $offer) {
+                if ((int)$offer['ID'] === $offerId) {
+                    $selected = $offer;
+                    break;
+                }
+            }
+        }
+
+        $product['PRESELECTED_OFFER'] = $selected;
+        $product['SELECTED_OFFER_ID'] = $selected['ID'] ?? null;
+    }
+
+    protected function withOfferUrl(array $offer, string $productUrl): array
+    {
+        $tpl = $offer['IBLOCK']['DETAIL_PAGE_URL'] ?? '';
+        $offer['DETAIL_PAGE_URL'] = $tpl
+            ? str_replace(['#PRODUCT_URL#', '#CODE#', '#ID#'], [$productUrl, $offer['CODE'], $offer['ID']], $tpl)
+            : null;
+
+        return $offer;
     }
 
     public function makeUrl(string $url): string
@@ -88,7 +135,7 @@ class CatalogService extends CoreCatalogService
     {
         $result = [];
         [$productIds, $sectionsIds] = $this->searchService->getIds($query, $limit);
-        if(empty($sectionsIds)) {
+        if (empty($sectionsIds)) {
             $sections = $this->catalogSectionsService->getSectionsByProductsIds($productIds);
         } else {
             $sections = $this->catalogSectionsService->getSections($sectionsIds);

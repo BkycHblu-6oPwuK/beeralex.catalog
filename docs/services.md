@@ -420,14 +420,6 @@ public function getSections(array $productIds): array
 
 ---
 
-## CatalogElementService
-
-### Описание
-
-Сервис для работы с элементами каталога (детальные страницы товаров).
-
----
-
 ## Использование сервисов
 
 ### Через DI контейнер

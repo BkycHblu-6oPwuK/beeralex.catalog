@@ -18,23 +18,23 @@ use Beeralex\Catalog\Repository\PersonTypeRepository;
 use Beeralex\Catalog\Repository\PriceRepository;
 use Beeralex\Catalog\Repository\SortingRepository;
 use Beeralex\Catalog\Service\Basket\BasketFactory;
-use Beeralex\Catalog\Service\CatalogElementService;
 use Beeralex\Catalog\Service\CatalogSectionsService;
 use Beeralex\Catalog\Service\Discount\CouponsService;
 use Beeralex\Catalog\Service\Discount\DiscountFactory;
 use Beeralex\Catalog\Service\OrderService;
 use Beeralex\Catalog\Service\PriceService;
 use Beeralex\Catalog\Service\SearchService;
-use Beeralex\Core\Repository\PropertyFeaturesRepository;
-use Beeralex\Core\Repository\PropertyRepository;
-use Beeralex\Core\Service\FileService;
-use Beeralex\Core\Service\HlblockService;
 use Beeralex\Core\Service\LanguageService;
 use Beeralex\Core\Service\LocationService;
 use Beeralex\Core\Service\SortingService;
 use Beeralex\Core\Service\UrlService;
 use Beeralex\Catalog\Repository\EmptySortingRepository;
 use Beeralex\Catalog\Repository\StoreRepository;
+use Beeralex\Catalog\Service\PropertyService;
+use Beeralex\Core\Repository\PropertyFeaturesRepository;
+use Beeralex\Core\Repository\PropertyRepository;
+use Beeralex\Core\Service\FileService;
+use Beeralex\Core\Service\HlblockService;
 use Bitrix\Main\Loader;
 use Dadata\DadataClient;
 
@@ -115,21 +115,14 @@ return [
                         sortingService: service(DIServiceKey::SORTING_SERVICE->value),
                         discountFactory: service(DiscountFactory::class),
                         catalogSectionsService: service(CatalogSectionsService::class),
-                        searchService: service(SearchService::class)
+                        searchService: service(SearchService::class),
+                        propertyService: service(PropertyService::class),
                     );
                 }
             ],
-            CatalogElementService::class => [
+            PropertyService::class => [
                 'constructor' => static function () {
-                    $offersRepository = null;
-                    try {
-                        $offersRepository = service(DIServiceKey::OFFERS_REPOSITORY->value);
-                    } catch (\Throwable) {
-                        $offersRepository = service(DIServiceKey::EMPTY_OFFERS_REPOSITORY->value);
-                    }
-                    return new CatalogElementService(
-                        productRepository: service(DIServiceKey::PRODUCT_REPOSITORY->value),
-                        offersRepository: $offersRepository,
+                    return new PropertyService(
                         propertyRepository: service(PropertyRepository::class),
                         propertyFeaturesRepository: service(PropertyFeaturesRepository::class),
                         hlblockService: service(HlblockService::class),
