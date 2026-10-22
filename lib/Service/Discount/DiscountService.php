@@ -38,13 +38,15 @@ class DiscountService
     {
         if ($this->discounts === null) {
             $discounts = $this->getSaleDiscounts();
-            $discounts->calculate();
-            $this->discounts = $discounts->getApplyResult(true);
+            if ($discounts) {
+                $discounts->calculate();
+                $this->discounts = $discounts->getApplyResult(true);
+            }
         }
-        return $this->discounts;
+        return $this->discounts ?? [];
     }
 
-    protected function getSaleDiscounts(): SaleDiscount
+    protected function getSaleDiscounts(): ?SaleDiscount
     {
         if ($this->order) {
             return SaleDiscount::buildFromOrder($this->order);
