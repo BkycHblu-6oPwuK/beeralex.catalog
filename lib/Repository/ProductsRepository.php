@@ -56,7 +56,7 @@ class ProductsRepository extends AbstractCatalogRepository implements ProductRep
         return $result;
     }
 
-    public function afterFindProducts(array &$products): void
+    protected function afterFindProducts(array &$products): void
     {
         // Implement any post-processing logic for found products here.
     }
