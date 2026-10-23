@@ -39,7 +39,7 @@ class ProductsRepository extends AbstractCatalogRepository implements ProductRep
             $filter,
             $select
         );
-        $this->afterFindProducts($items);
+        $this->afterFindProducts($items, $productIds);
 
         $products = [];
         foreach ($items as $item) {
@@ -56,7 +56,7 @@ class ProductsRepository extends AbstractCatalogRepository implements ProductRep
         return $result;
     }
 
-    protected function afterFindProducts(array &$products): void
+    protected function afterFindProducts(array &$products, array $productIds): void
     {
         // Implement any post-processing logic for found products here.
     }
