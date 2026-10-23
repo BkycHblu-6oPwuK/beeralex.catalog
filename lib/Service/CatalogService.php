@@ -71,6 +71,32 @@ class CatalogService extends CoreCatalogService
     }
 
     /**
+     * Возвращает товары (и опционально скидками). Без предложений
+     */
+    public function getProducts(
+        array $productIds,
+        bool $isAvailable = true,
+        bool $applyDiscounts = false,
+        bool $withProperties = false,
+    ): array {
+        if (empty($productIds)) {
+            return [];
+        }
+
+        $products = $this->productsRepository->getProducts($productIds, $isAvailable);
+
+        if ($withProperties) {
+            $this->propertyService->attachProperties($products);
+        }
+
+        if ($applyDiscounts) {
+            $this->applyDiscounts($products);
+        }
+
+        return $products;
+    }
+
+    /**
      * Возвращает данные одного товара с его предложениями (и опционально скидками).
      */
     public function getProduct(int $productId, ?int $offerId = null, bool $applyDiscounts = true): array

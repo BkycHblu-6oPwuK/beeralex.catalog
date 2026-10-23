@@ -23,7 +23,7 @@ class ProductsRepository extends AbstractCatalogRepository implements ProductRep
     /**
      * Получает товары по ID со связкой цен.
      */
-    public function getProducts(array $productIds, bool $onlyAvailable = true): array
+    public function getProducts(array $productIds, bool $onlyAvailable = true, array $select = ['*']): array
     {
         if (empty($productIds)) {
             return [];
@@ -37,7 +37,9 @@ class ProductsRepository extends AbstractCatalogRepository implements ProductRep
 
         $items = $this->findAll(
             $filter,
+            $select
         );
+        $this->afterFindProducts($items);
 
         $products = [];
         foreach ($items as $item) {
@@ -52,6 +54,11 @@ class ProductsRepository extends AbstractCatalogRepository implements ProductRep
         }
 
         return $result;
+    }
+
+    public function afterFindProducts(array &$products): void
+    {
+        // Implement any post-processing logic for found products here.
     }
 
     /**
@@ -211,18 +218,5 @@ class ProductsRepository extends AbstractCatalogRepository implements ProductRep
             $basketUserId,
             $currentElementId
         );
-    }
-
-    public function getProductWithOffers(int $productId): ?array
-    {
-        $product = $this->one(['ID' => $productId]);
-        if (!$product) {
-            return null;
-        }
-
-        $offers = service(\Beeralex\Catalog\Contracts\OfferRepositoryContract::class)->getOffersByProductIds([$productId]);
-        $product['OFFERS'] = $offers[$productId] ?? [];
-
-        return $product;
     }
 }
