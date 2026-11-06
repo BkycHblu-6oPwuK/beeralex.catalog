@@ -7,6 +7,7 @@ use Beeralex\Core\Service\LanguageService;
 class SearchService
 {
     public const REQUEST_PARAM = 'q';
+    public const TAGS_PARAM = 'tags';
 
     /**
      * @param callable|null $factoryIncludeComponent Фабрика для подключения компонента поиска (возвращает массив с ID элементов)
@@ -17,11 +18,15 @@ class SearchService
     ) {}
 
     /**
+     * @param array|null $tags теги из вкладки SEO
      * @return array{0: array, 1: array} Массив с ID товаров и массив с ID разделов
      */
-    public function getIds(string $query, int $limit): array
+    public function getIds(string $query, int $limit, ?array $tags = null): array
     {
         $_REQUEST[static::REQUEST_PARAM] = $query;
+        if ($tags !== null) {
+            $_REQUEST[static::TAGS_PARAM] = implode(',', $tags);
+        }
         $getIds = function (): array {
             if(empty($this->factoryIncludeComponent) || !is_callable($this->factoryIncludeComponent)) {
                 return [[], []];
