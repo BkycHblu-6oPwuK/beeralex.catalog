@@ -2,7 +2,6 @@
 
 namespace Beeralex\Catalog\Service;
 
-use Beeralex\Catalog\Contracts\ProductRepositoryContract;
 use Beeralex\Core\Service\LanguageService;
 
 class SearchService
@@ -14,7 +13,6 @@ class SearchService
      */
     public function __construct(
         protected $factoryIncludeComponent,
-        protected readonly ProductRepositoryContract $productRepository,
         protected readonly LanguageService $languageService,
     ) {}
 

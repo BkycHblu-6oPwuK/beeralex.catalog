@@ -170,7 +170,6 @@ return [
                                 "PAGER_TEMPLATE" => "N",
                             ),
                         ),
-                        productRepository: service(DIServiceKey::PRODUCT_REPOSITORY->value),
                         languageService: service(LanguageService::class),
                     );
                 }
