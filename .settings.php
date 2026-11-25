@@ -4,7 +4,14 @@ require_once __DIR__ . '/lib/Enum/DIServiceKey.php';
 use Beeralex\Catalog\Contracts\StoreRepositoryContract;
 use Beeralex\Catalog\Enum\DIServiceKey;
 use Beeralex\Catalog\Location\BitrixLocationResolver;
+use Beeralex\Catalog\Location\Provider\BitrixLocationProvider;
 use Beeralex\Catalog\Location\Contracts\BitrixLocationResolverContract;
+use Beeralex\Catalog\Location\Contracts\LocationProvider;
+use Beeralex\Catalog\Location\Provider\DadataLocationProvider;
+use Beeralex\Catalog\Location\LocationSearchException;
+use Beeralex\Catalog\Location\LocationSearchParams;
+use Beeralex\Catalog\Location\LocationSuggestionFilter;
+use Beeralex\Catalog\Location\Service\LocationSearchService;
 use Beeralex\Catalog\Repository\CatalogViewedProductRepository;
 use Beeralex\Catalog\Repository\EmptyOffersRepository;
 use Beeralex\Catalog\Repository\OffersRepository;
@@ -218,7 +225,35 @@ return [
             DadataClient::class => [
                 'constructor' => static function () {
                     $options = service(Options::class);
+                    if ($options->dadataApiKey === '' || $options->dadataSecretKey === '') {
+                        throw new LocationSearchException(
+                            'Не заданы ключи DaData в настройках beeralex.catalog'
+                        );
+                    }
                     return new DadataClient($options->dadataApiKey, $options->dadataSecretKey);
+                }
+            ],
+            LocationSearchService::class => [
+                'constructor' => static function () {
+                    return new LocationSearchService(
+                        providerFactories: [
+                            'bitrix' => static fn(): LocationProvider =>
+                            new BitrixLocationProvider(
+                                locationService: service(LocationService::class)
+                            ),
+                            'dadata' => static function (LocationSearchParams $params): LocationProvider {
+                                return new DadataLocationProvider(
+                                    client: service(DadataClient::class),
+                                    filter: $params->dadataFilter
+                                        ? [LocationSuggestionFilter::class, 'isValidCity']
+                                        : null,
+                                    fromBound: $params->fromBound,
+                                    toBound: $params->toBound,
+                                    country: $params->country,
+                                );
+                            },
+                        ],
+                    );
                 }
             ],
         ],

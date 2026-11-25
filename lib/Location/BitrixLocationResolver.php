@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Beeralex\Catalog\Location;
@@ -86,7 +87,7 @@ class BitrixLocationResolver implements BitrixLocationResolverContract
         if ($suggestions === null) {
             return null;
         }
-        return $parser->parse($suggestions);
+        return $parser->parse($suggestions, is_string($location) ? $location : null);
     }
 
     protected function fetchSuggestions(string|LocationDTO $location): ?array

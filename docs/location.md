@@ -4,15 +4,219 @@
 
 ## Архитектура
 
-Система построена на двух основных компонентах:
+Система поддерживает два сценария:
 
-1. **Parser** - разбор данных от API и извлечение нужной информации
-2. **Resolver** - преобразование данных API в коды локаций Bitrix
+1. **Поиск подсказок** через `LocationSearchService` — единый формат результата для провайдеров Bitrix и DaData.
+2. **Определение кода Bitrix** через `BitrixLocationResolver` — преобразование адреса или координат в код локации Bitrix.
+
+Для второго сценария используются **Parser**, разбирающий данные внешнего API, и **Resolver**, выполняющий поиск соответствующей локации.
 
 По умолчанию `BitrixLocationResolver` работает напрямую с `Dadata\DadataClient`. Для смены источника подсказок достаточно унаследовать резолвер и переопределить protected-методы `fetchSuggestions()` и `getParser()` — отдельный интерфейс клиента не требуется.
 
 ```
 Адрес/Координаты → DadataClient → Parser → Resolver → Код локации Bitrix
+```
+
+---
+
+## LocationSearchService
+
+`LocationSearchService` выполняет поиск подсказок локаций через выбираемый провайдер и возвращает данные в едином формате. Сервис зарегистрирован в DI модуля:
+
+```php
+use Beeralex\Catalog\Location\LocationSearchParams;
+use Beeralex\Catalog\Location\Service\LocationSearchService;
+
+$search = service(LocationSearchService::class);
+
+$result = $search->search(LocationSearchParams::fromArray([
+    'PROVIDER' => 'dadata',
+    'QUERY' => 'мыти',
+    'COUNT' => 7,
+]));
+```
+
+Результат:
+
+```php
+[
+    'provider' => 'dadata',
+    'items' => [
+        [
+            'provider' => 'dadata',
+            'name' => 'Мытищи',
+            'fullName' => 'г Мытищи, Московская обл',
+            'type' => 'city',
+            'path' => ['Московская обл'],
+            'guid' => '...',
+            // Дополнительные поля DaData
+        ],
+    ],
+];
+```
+
+### Провайдеры
+
+Провайдер реализует контракт `Beeralex\Catalog\Location\Contracts\LocationProvider`:
+
+```php
+public function code(): string;
+
+/** @return LocationItem[] */
+public function search(string $query, int $limit): array;
+```
+
+По умолчанию настроены два провайдера:
+
+| Код | Провайдер | Особенности |
+|---|---|---|
+| `bitrix` | `BitrixLocationProvider` | ID, код, тип и путь из `LocationService::find()` |
+| `dadata` | `DadataLocationProvider` | ФИАС, КЛАДР, координаты, почтовый индекс, часовой пояс, ОКАТО/ОКТМО и части адреса |
+
+`BitrixLocationProvider` возвращает `path` от крупного уровня к мелкому без самой найденной локации. `fullName` собирается из `path` и `name`.
+
+### Параметры поиска
+
+`LocationSearchParams::fromArray()` нормализует и ограничивает входные значения:
+
+| Параметр | Значение по умолчанию | Описание |
+|---|---:|---|
+| `PROVIDER` | пусто | Код зарегистрированной фабрики, например `bitrix` или `dadata` |
+| `QUERY` | пусто | Текст без HTML-тегов, нормализованные пробелы, не более 100 символов |
+| `COUNT` | `7` | Количество результатов от 1 до 20 |
+| `MIN_QUERY_LENGTH` | `2` | Минимальная длина запроса |
+| `CACHE_TIME` | `3600` | Время кеширования в секундах; `0` отключает кеш |
+| `DADATA_FILTER` | `true` | Отсев территорий СНТ, ГСК, промзон и подобных объектов |
+| `DADATA_FROM_BOUND` | `city` | Начальная граница запроса DaData |
+| `DADATA_TO_BOUND` | `settlement` | Конечная граница запроса DaData |
+| `DADATA_COUNTRY` | пусто | Двухбуквенный ISO-код страны, например `RU` |
+
+Допустимые границы DaData: `country`, `region`, `area`, `city`, `settlement`, `street`, `house`.
+
+При коротком запросе сервис не обращается к провайдеру и возвращает пустой список:
+
+```php
+[
+    'provider' => 'bitrix',
+    'items' => [],
+]
+```
+
+### Строгий и безопасный API
+
+Метод `search()` выбрасывает `LocationSearchException`, если провайдер не зарегистрирован или не настроен:
+
+```php
+$result = $search->search($params);
+```
+
+Для компонентов и HTTP-контроллеров удобнее `safeSearch()`. Он не выбрасывает исключения наружу и добавляет список ошибок:
+
+```php
+$result = $search->safeSearch($params);
+
+if ($result['errors'] !== []) {
+    // LOCATION_UNAVAILABLE — ожидаемая ошибка провайдера
+    // LOCATION_SEARCH_FAILED — внутренняя ошибка; детали записаны в лог
+}
+```
+
+Формат ошибок:
+
+```php
+[
+    'provider' => 'dadata',
+    'items' => [],
+    'errors' => [
+        [
+            'code' => 'LOCATION_UNAVAILABLE',
+            'message' => 'Не заданы ключи DaData в настройках beeralex.catalog',
+        ],
+    ],
+];
+```
+
+### Формат элемента
+
+Оба провайдера преобразуются в `LocationItem`. Общие поля:
+
+- `provider`, `name`, `fullName`;
+- `id`, `code`;
+- `type`, `path`.
+
+Дополнительные поля DaData:
+
+- `unrestrictedValue`, `guid`, `fiasId`, `kladrId`, `fiasLevel`;
+- `postalCode`, `countryIso`, `federalDistrict`;
+- `region`, `area`, `city`, `settlement`;
+- `latitude`, `longitude`, `timezone`, `okato`, `oktmo`, `geonameId`, `capitalMarker`.
+
+Объект возвращает camelCase-данные через `toArray()`. Для привычного результата компонента Bitrix используйте `LocationSearchService::toResult()` — ключи рекурсивно преобразуются в `UPPER_SNAKE_CASE`:
+
+```php
+$arResult = LocationSearchService::toResult($search->safeSearch($params));
+```
+
+### Кеширование
+
+Сервис использует общий трейт `Beeralex\Core\Traits\Cacheable`. Ключ учитывает провайдер, нормализованный запрос, лимит, фильтр, границы DaData и страну. Кеш записывается в директорию `/beeralex/location`.
+
+При `CACHE_TIME = 0` поиск выполняется без кеширования.
+
+```php
+$params = LocationSearchParams::fromArray([
+    'PROVIDER' => 'bitrix',
+    'QUERY' => 'моск',
+    'CACHE_TIME' => 0,
+]);
+```
+
+### Добавление провайдера
+
+Фабрики провайдеров передаются в конструктор `LocationSearchService`. Чтобы добавить провайдер, реализуйте `LocationProvider` и добавьте фабрику при регистрации сервиса в `.settings.php`:
+
+```php
+use Beeralex\Catalog\Location\Contracts\LocationProvider;
+use Beeralex\Catalog\Location\LocationSearchParams;
+use Beeralex\Catalog\Location\Service\LocationSearchService;
+
+LocationSearchService::class => [
+    'constructor' => static function () {
+        return new LocationSearchService([
+            'bitrix' => static fn(): LocationProvider => /* ... */,
+            'dadata' => static fn(LocationSearchParams $params): LocationProvider => /* ... */,
+            'custom' => static fn(LocationSearchParams $params): LocationProvider =>
+                new CustomLocationProvider(/* параметры из $params */),
+        ]);
+    },
+],
+```
+
+Компонент получает сервис через DI. Для тестов или наследования сервиса можно подменить экземпляр методом `setSearchService()` у компонента.
+
+### Использование из компонента
+
+```php
+$APPLICATION->IncludeComponent('beeralex:location', '', [
+    'PROVIDER' => 'dadata',
+    'QUERY' => 'Мытищи',
+    'COUNT' => 7,
+    'DADATA_COUNTRY' => 'RU',
+    'CACHE_TIME' => 3600,
+]);
+```
+
+`ajax.php` предоставляет действие `search`:
+
+```js
+BX.ajax.runComponentAction('beeralex:location', 'search', {
+    mode: 'ajax',
+    data: {
+        query: 'мыти',
+        provider: 'dadata',
+        count: 7,
+    },
+}).then(response => response.data.items);
 ```
 
 ---
@@ -94,7 +298,7 @@ interface BitrixLocationResolverContract
 
 Клиент для API сервиса DaData (dadata.ru) из пакета `hflabs/dadata` (`Dadata\DadataClient`). Предоставляет подсказки адресов (`suggest`) и геолокацию по координатам (`geolocate`).
 
-Клиент не регистрируется в DI отдельно — он создаётся внутри `BitrixLocationResolver::getClient()` из настроек модуля (`Options::dadataApiKey`, `Options::dadataSecretKey`). Чтобы подменить клиент — переопределите `getClient()` в наследнике резолвера.
+Клиент зарегистрирован в DI как `Dadata\DadataClient` и создаётся из настроек модуля (`Options::dadataApiKey`, `Options::dadataSecretKey`). `BitrixLocationResolver` получает его через `getClient()`. Эту регистрацию или сам метод `getClient()` можно переопределить для другого клиента.
 
 ---
 
@@ -150,7 +354,7 @@ public function __construct(
 
 ### Метод getClient()
 
-Возвращает клиент для получения подсказок. По умолчанию создаёт `Dadata\DadataClient` из настроек модуля. **Переопределите в наследнике** для использования другого клиента.
+Возвращает клиент для получения подсказок. По умолчанию получает `Dadata\DadataClient` из DI. **Переопределите в наследнике** для использования другого клиента.
 
 ```php
 /**
